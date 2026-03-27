@@ -1,0 +1,233 @@
+// Synapse Prisma Schema
+// Run: npx prisma migrate dev --name <migration-name>
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum NodeCategory {
+  feature
+  risk
+  blocker
+  dependency
+  question
+  assumption
+  milestone
+  note
+}
+
+enum NodeStatus {
+  todo
+  in_progress
+  done
+  blocked
+  cancelled
+}
+
+enum NodePriority {
+  critical
+  high
+  medium
+  low
+}
+
+enum EffortUnit {
+  hours
+  days
+  story_points
+}
+
+enum EdgeType {
+  dependency
+  related
+  blocks
+  triggers
+  informs
+}
+
+enum SnapshotTrigger {
+  manual
+  share_link_created
+  bulk_add
+  milestone_marked
+}
+
+enum ChangeAction {
+  create
+  update
+  delete
+}
+
+enum ChangeEntityType {
+  node
+  edge
+  map
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password_hash String
+  name          String
+  avatar_url    String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  projects    Project[]
+  maps        Map[]
+  change_logs ChangeLog[]
+
+  @@map("users")
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  user_id     String
+  name        String
+  description String?
+  color       String    @default("#6366F1")
+  archived_at DateTime?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  maps Map[]
+
+  @@index([user_id])
+  @@index([user_id, archived_at])
+  @@map("projects")
+}
+
+model Map {
+  id             String    @id @default(cuid())
+  user_id        String
+  project_id     String?
+  name           String
+  description    String?
+  share_token    String?   @unique
+  share_config   Json?
+  viewport_state Json?
+  thumbnail_svg  String?
+  archived_at    DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  project     Project?   @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  nodes       Node[]
+  edges       Edge[]
+  snapshots   Snapshot[]
+  change_logs ChangeLog[]
+
+  @@index([user_id])
+  @@index([project_id])
+  @@index([user_id, archived_at])
+  @@map("maps")
+}
+
+model Node {
+  id                     String        @id @default(cuid())
+  map_id                 String
+  parent_id              String?
+  label                  String        @db.VarChar(200)
+  description            String?
+  category               NodeCategory  @default(feature)
+  status                 NodeStatus    @default(todo)
+  priority               NodePriority  @default(medium)
+  position_x             Float
+  position_y             Float
+  width                  Int?          @default(200)
+  height                 Int?          @default(80)
+  color_override         String?
+  effort_value           Float?
+  effort_unit            EffortUnit?
+  deadline               DateTime?
+  metadata               Json?
+  ai_category_confidence Float?
+  created_at             DateTime      @default(now())
+  updated_at             DateTime      @updatedAt
+
+  map             Map         @relation(fields: [map_id], references: [id], onDelete: Cascade)
+  parent          Node?       @relation("NodeChildren", fields: [parent_id], references: [id], onDelete: SetNull)
+  children        Node[]      @relation("NodeChildren")
+  source_edges    Edge[]      @relation("SourceNode")
+  target_edges    Edge[]      @relation("TargetNode")
+  change_logs     ChangeLog[]
+
+  @@index([map_id])
+  @@index([parent_id])
+  @@index([map_id, category])
+  @@index([map_id, status])
+  @@map("nodes")
+}
+
+model Edge {
+  id             String   @id @default(cuid())
+  map_id         String
+  source_node_id String
+  target_node_id String
+  edge_type      EdgeType
+  label          String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  map         Map  @relation(fields: [map_id], references: [id], onDelete: Cascade)
+  source_node Node @relation("SourceNode", fields: [source_node_id], references: [id], onDelete: Cascade)
+  target_node Node @relation("TargetNode", fields: [target_node_id], references: [id], onDelete: Cascade)
+
+  @@unique([source_node_id, target_node_id, edge_type])
+  @@index([map_id])
+  @@index([source_node_id])
+  @@index([target_node_id])
+  @@map("edges")
+}
+
+model Snapshot {
+  id            String          @id @default(cuid())
+  map_id        String
+  name          String
+  description   String?
+  trigger       SnapshotTrigger
+  snapshot_data Json
+  node_count    Int
+  thumbnail_svg String?
+  created_at    DateTime        @default(now())
+
+  map Map @relation(fields: [map_id], references: [id], onDelete: Cascade)
+
+  @@index([map_id])
+  @@index([map_id, created_at])
+  @@map("snapshots")
+}
+
+model ChangeLog {
+  id          String           @id @default(cuid())
+  map_id      String
+  node_id     String?
+  edge_id     String?
+  user_id     String
+  action      ChangeAction
+  entity_type ChangeEntityType
+  old_value   Json?
+  new_value   Json?
+  created_at  DateTime         @default(now())
+
+  map  Map   @relation(fields: [map_id], references: [id], onDelete: Cascade)
+  node Node? @relation(fields: [node_id], references: [id], onDelete: SetNull)
+  user User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([map_id])
+  @@index([node_id])
+  @@index([map_id, created_at])
+  @@map("change_logs")
+}

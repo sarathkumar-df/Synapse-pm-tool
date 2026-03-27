@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+}
+
+/* React Flow canvas background */
+.react-flow__background {
+  background-color: #FAFAFA;
+}
+
+/* Animated conflict edges */
+.conflict-edge-critical {
+  stroke-dasharray: 8 4;
+  animation: dash 0.8s linear infinite;
+}
+.conflict-edge-warning {
+  stroke-dasharray: 8 4;
+  animation: dash 1.2s linear infinite;
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Critical path node glow */
+.node-critical-path {
+  box-shadow: 0 0 0 3px #F57C00, 0 0 12px rgba(245, 124, 0, 0.35);
+}
+
+/* Conflict node glows */
+.node-conflict-critical {
+  box-shadow: 0 0 0 2px #C62828, 0 0 8px rgba(198, 40, 40, 0.3);
+}
+.node-conflict-warning {
+  box-shadow: 0 0 0 2px #F9A825, 0 0 8px rgba(249, 168, 37, 0.3);
+}
+
+/* Ripple mode fading */
+.node-ripple-dim {
+  opacity: 0.3;
+  transition: opacity 200ms ease;
+}
+.node-ripple-full {
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+/* Suggestion ghost nodes */
+.node-suggestion-ghost {
+  opacity: 0.4;
+  border-style: dashed !important;
+}

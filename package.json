@@ -1,0 +1,21 @@
+{
+  "name": "synapse",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-powered project mind mapping platform",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @synapse/api dev\" \"pnpm --filter @synapse/web dev\"",
+    "build": "pnpm --filter @synapse/shared build && pnpm --filter @synapse/api build && pnpm --filter @synapse/web build",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @synapse/api test",
+    "test:web": "pnpm --filter @synapse/web test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @synapse/api db:migrate",
+    "db:studio": "pnpm --filter @synapse/api db:studio"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "typescript": "^5.4.0"
+  }
+}

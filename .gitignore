@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# Prisma
+apps/api/src/db/migrations/
+
+# Build outputs
+apps/web/dist/
+apps/api/dist/
+packages/*/dist/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

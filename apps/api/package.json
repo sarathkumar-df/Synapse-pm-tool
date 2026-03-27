@@ -1,0 +1,53 @@
+{
+  "name": "@synapse/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "db:migrate": "prisma migrate dev --schema=src/db/schema.prisma",
+    "db:studio": "prisma studio --schema=src/db/schema.prisma",
+    "db:generate": "prisma generate --schema=src/db/schema.prisma"
+  },
+  "prisma": {
+    "schema": "src/db/schema.prisma"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@prisma/client": "^5.12.0",
+    "@synapse/shared": "workspace:*",
+    "@types/bcryptjs": "^3.0.0",
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.2",
+    "rate-limit-redis": "^4.2.0",
+    "sanitize-html": "^2.13.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.0",
+    "@types/sanitize-html": "^2.11.0",
+    "@types/supertest": "^6.0.2",
+    "prisma": "^5.12.0",
+    "supertest": "^6.3.4",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}
