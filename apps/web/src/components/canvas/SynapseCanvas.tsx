@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   MiniMap,
   NodeToolbar,
   useNodesState,
@@ -32,6 +33,7 @@ import EdgeTypePicker from './EdgeTypePicker'
 import NodeContextMenu from './NodeContextMenu'
 import CommandPalette from './CommandPalette'
 import MultiSelectToolbar from './MultiSelectToolbar'
+import SnapGridToggle from './SnapGridToggle'
 import type { SynapseNodeData, SynapseEdgeData } from '../../types/canvas.types'
 import { EDGE_TYPE_STYLES } from '../../constants/node-categories'
 
@@ -46,6 +48,8 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
   const setActivePanel        = useUIStore(s => s.setActivePanel)
   const commandPaletteOpen    = useUIStore(s => s.commandPaletteOpen)
   const setCommandPaletteOpen = useUIStore(s => s.setCommandPaletteOpen)
+  const snapToGrid            = useUIStore(s => s.snapToGrid)
+  const setSnapToGrid         = useUIStore(s => s.setSnapToGrid)
 
   // Zustand subscriptions
   const nodes        = useCanvasStore(s => s.nodes)
@@ -356,6 +360,11 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
         handleDeselect()
         return
       }
+      if ((e.key === 'g' || e.key === 'G') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setSnapToGrid(!snapToGrid)
+        return
+      }
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         createNode(reactFlow.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }))
@@ -365,7 +374,7 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [reactFlow, createNode, undo, redo, setCommandPaletteOpen, selectedNodeIds, handleMultiDelete, handleDeselect])
+  }, [reactFlow, createNode, undo, redo, setCommandPaletteOpen, selectedNodeIds, handleMultiDelete, handleDeselect, snapToGrid, setSnapToGrid])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -386,12 +395,18 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
         onNodeContextMenu={onNodeContextMenu as any}
         connectionMode={ConnectionMode.Loose}
         multiSelectionKeyCode="Shift"
+        snapToGrid={snapToGrid}
+        snapGrid={[20, 20]}
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={24} color="#E5E7EB" />
+        {snapToGrid ? (
+          <Background variant={BackgroundVariant.Lines} gap={20} color="#E5E7EB" lineWidth={0.5} />
+        ) : (
+          <Background gap={24} color="#E5E7EB" />
+        )}
         <MiniMap
           nodeStrokeWidth={3}
           style={{ borderRadius: 12, border: '1px solid #E5E7EB', bottom: 16, right: 16 }}
@@ -404,6 +419,10 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
           </NodeToolbar>
         )}
       </ReactFlow>
+
+      <div className="absolute bottom-4 left-4 z-10">
+        <SnapGridToggle active={snapToGrid} onToggle={() => setSnapToGrid(!snapToGrid)} />
+      </div>
 
       {selectedNodeIds.length > 1 && (
         <MultiSelectToolbar

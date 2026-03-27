@@ -37,6 +37,10 @@ interface UIState {
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
 
+  // Canvas settings
+  snapToGrid: boolean
+  setSnapToGrid: (snap: boolean) => void
+
   // Filter State
   filters: NodeFilterState
   setFilters: (filters: NodeFilterState) => void
@@ -52,6 +56,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   shareModalOpen: false,
   snapshotModalOpen: false,
   commandPaletteOpen: false,
+  snapToGrid: false,
   filters: {},
 
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -77,6 +82,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+  setSnapToGrid: (snap) => set({ snapToGrid: snap }),
 
   setFilters: (filters) => set({ filters }),
 
