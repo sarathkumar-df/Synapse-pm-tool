@@ -5,10 +5,10 @@
  */
 
 import type {
-  User, Project, Map, Node, Edge, Snapshot, ChangeLog,
+  User, Map, Node, Edge,
   NodeCategory, NodeStatus, NodePriority, EffortUnit, EdgeType,
-  ShareConfig, ViewportState, Conflict, CriticalPathResult,
-  NodeSuggestion, ResolutionStrategy, SnapshotData
+  ViewportState, Conflict, CriticalPathResult,
+  NodeSuggestion, ResolutionStrategy,
 } from './entities';
 
 // ─── Standard Response Wrappers ───────────────────────────────────────────────
@@ -117,7 +117,6 @@ export interface SharedMapResponse {
 // ─── Nodes ────────────────────────────────────────────────────────────────────
 
 export interface CreateNodeRequest {
-  map_id: string;
   parent_id?: string;
   label: string;
   description?: string;

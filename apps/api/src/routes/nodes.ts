@@ -51,12 +51,35 @@ async function assertMapOwnership(mapId: string, userId: string) {
   return map
 }
 
+// GET /api/maps/:mapId/nodes/:nodeId/history
+router.get('/:mapId/nodes/:nodeId/history', async (req, res, next) => {
+  try {
+    await assertMapOwnership(req.params.mapId, req.userId)
+    const history = await prisma.changeLog.findMany({
+      where: { map_id: req.params.mapId, node_id: req.params.nodeId },
+      orderBy: { created_at: 'desc' },
+      take: 50,
+    })
+    res.json({ data: { history } })
+  } catch (err) { next(err) }
+})
+
 // POST /api/maps/:mapId/nodes
 router.post('/:mapId/nodes', validateBody(createSchema), async (req, res, next) => {
   try {
     await assertMapOwnership(req.params.mapId, req.userId)
     const node = await prisma.node.create({
       data: { ...req.body, map_id: req.params.mapId },
+    })
+    await prisma.changeLog.create({
+      data: {
+        map_id: req.params.mapId,
+        node_id: node.id,
+        user_id: req.userId,
+        action: 'create',
+        entity_type: 'node',
+        new_value: node as any,
+      },
     })
     const [conflicts, critical_path] = await Promise.all([
       detectConflicts(req.params.mapId),
@@ -88,10 +111,29 @@ router.patch('/:mapId/nodes/bulk', async (req, res, next) => {
 router.patch('/:mapId/nodes/:nodeId', validateBody(updateSchema), async (req, res, next) => {
   try {
     await assertMapOwnership(req.params.mapId, req.userId)
+    // Only log changelog for meaningful field changes (not position-only auto-saves)
+    const POSITION_ONLY = new Set(['position_x', 'position_y'])
+    const isMeaningfulChange = Object.keys(req.body).some(k => !POSITION_ONLY.has(k))
+    const before = isMeaningfulChange
+      ? await prisma.node.findUnique({ where: { id: req.params.nodeId } })
+      : null
     const node = await prisma.node.update({
       where: { id: req.params.nodeId, map_id: req.params.mapId },
       data: req.body,
     })
+    if (isMeaningfulChange) {
+      await prisma.changeLog.create({
+        data: {
+          map_id: req.params.mapId,
+          node_id: node.id,
+          user_id: req.userId,
+          action: 'update',
+          entity_type: 'node',
+          old_value: before as any,
+          new_value: node as any,
+        },
+      })
+    }
     const [conflicts, critical_path] = await Promise.all([
       detectConflicts(req.params.mapId),
       calculateCriticalPath(req.params.mapId),
@@ -104,9 +146,22 @@ router.patch('/:mapId/nodes/:nodeId', validateBody(updateSchema), async (req, re
 router.delete('/:mapId/nodes/:nodeId', async (req, res, next) => {
   try {
     await assertMapOwnership(req.params.mapId, req.userId)
+    const before = await prisma.node.findUnique({ where: { id: req.params.nodeId } })
     await prisma.node.delete({
       where: { id: req.params.nodeId, map_id: req.params.mapId },
     })
+    if (before) {
+      await prisma.changeLog.create({
+        data: {
+          map_id: req.params.mapId,
+          node_id: req.params.nodeId,
+          user_id: req.userId,
+          action: 'delete',
+          entity_type: 'node',
+          old_value: before as any,
+        },
+      })
+    }
     const [conflicts, critical_path] = await Promise.all([
       detectConflicts(req.params.mapId),
       calculateCriticalPath(req.params.mapId),

@@ -5,7 +5,7 @@
  */
 
 import { create } from 'zustand'
-import type { Node, Edge, Conflict, CriticalPathResult } from '../../../docs/contracts/entities'
+import type { Node, Edge, Conflict, CriticalPathResult } from '@synapse/shared'
 
 type CanvasOperation =
   | { type: 'ADD_NODE'; node: Node }

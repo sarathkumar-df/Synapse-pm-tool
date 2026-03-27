@@ -243,10 +243,12 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
       if (ids.length === 1) {
         selectNode(ids[0])
         setActivePanel('node-detail')
-      } else {
+      } else if (ids.length > 1) {
         selectNode(null)
-        if (ids.length === 0) setActivePanel(null)
       }
+      // ids.length === 0: do NOT close the panel here.
+      // RF fires spurious empty-selection events when node data updates (setConflicts, etc.)
+      // cause setRfNodes to be called. Explicit deselection is handled by onPaneClick and handleDeselect.
     },
     [selectNode, setActivePanel]
   )

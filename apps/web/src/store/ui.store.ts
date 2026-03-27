@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand'
-import type { NodeFilterState } from '../../../docs/contracts/entities'
+import type { NodeFilterState } from '@synapse/shared'
 
 type ActivePanel = 'node-detail' | 'conflicts' | 'snapshots' | null
 type ToastType = 'success' | 'error' | 'warning' | 'info'

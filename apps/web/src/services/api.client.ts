@@ -12,6 +12,7 @@ import type {
   Edge, CreateEdgeRequest, UpdateEdgeRequest, Conflict, CriticalPathResult,
   Snapshot, CreateSnapshotRequest, SnapshotDiff,
   SharedMapResponse,
+  ChangeLog,
   CategorizationRequest, CategorizationResponse,
   SuggestionRequest, SuggestionResponse,
   NlToMapRequest, NlToMapResponse,
@@ -136,6 +137,13 @@ export const edgesApi = {
     patch<Edge>(`/maps/${mapId}/edges/${edgeId}`, data),
   delete: (mapId: string, edgeId: string) =>
     request<{ conflicts: Conflict[]; critical_path: CriticalPathResult }>('DELETE', `/maps/${mapId}/edges/${edgeId}`),
+}
+
+// ─── Change History ───────────────────────────────────────────────────────────
+
+export const changeLogsApi = {
+  nodeHistory: (mapId: string, nodeId: string) =>
+    get<{ history: ChangeLog[] }>(`/maps/${mapId}/nodes/${nodeId}/history`),
 }
 
 // ─── Snapshots ────────────────────────────────────────────────────────────────

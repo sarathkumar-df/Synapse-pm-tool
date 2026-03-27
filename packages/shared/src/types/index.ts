@@ -27,7 +27,7 @@ export type {
   NodeSuggestion,
   ResolutionStrategy,
   ResolutionOperation,
-} from '../../../docs/contracts/entities'
+} from '../../../../docs/contracts/entities'
 
 export type {
   // API contracts
@@ -61,4 +61,4 @@ export type {
   ConflictResolutionResponse,
   ExportPdfRequest,
   ExportImageRequest,
-} from '../../../docs/contracts/api'
+} from '../../../../docs/contracts/api'

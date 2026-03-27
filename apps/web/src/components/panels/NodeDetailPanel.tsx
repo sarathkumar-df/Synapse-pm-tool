@@ -1,12 +1,12 @@
 import { memo, useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCanvasStore } from '../../store/canvas.store'
 import { useUIStore } from '../../store/ui.store'
-import { nodesApi } from '../../services/api.client'
+import { nodesApi, changeLogsApi } from '../../services/api.client'
 import { NODE_CATEGORY_COLORS, EDGE_TYPE_STYLES } from '../../constants/node-categories'
-import type { Node } from '../../../../docs/contracts/entities'
-import type { NodeCategory, NodeStatus, NodePriority, EffortUnit, EdgeType } from '@synapse/shared'
+import type { Node } from '@synapse/shared'
+import type { ChangeLog, NodeCategory, NodeStatus, NodePriority, EffortUnit, EdgeType } from '@synapse/shared'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ const EDGE_TYPE_LABELS: Record<EdgeType, string> = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved'
-type PanelTab  = 'details' | 'connections'
+type PanelTab  = 'details' | 'connections' | 'history'
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
@@ -72,15 +72,17 @@ function NodeDetailPanel({ mapId }: { mapId: string }) {
   const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingUpdates = useRef<Partial<Node>>({})
   const currentNodeId  = useRef<string | null>(null)
+  const queryClient    = useQueryClient()
 
   const { mutate: saveMutation } = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Node> }) =>
       nodesApi.update(mapId, id, updates as any),
-    onSuccess: ({ conflicts, critical_path }) => {
+    onSuccess: ({ conflicts, critical_path }, { id }) => {
       setConflicts(conflicts, critical_path)
       setSaveState('saved')
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
       savedTimerRef.current = setTimeout(() => setSaveState('idle'), 2000)
+      queryClient.invalidateQueries({ queryKey: ['node-history', id] })
     },
     onError: (err: Error) => {
       setSaveState('idle')
@@ -173,7 +175,7 @@ function NodeDetailPanel({ mapId }: { mapId: string }) {
 
           {/* Tabs */}
           <div className="flex border-b border-gray-100 shrink-0">
-            {(['details', 'connections'] as const).map(tab => (
+            {(['details', 'connections', 'history'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -197,13 +199,15 @@ function NodeDetailPanel({ mapId }: { mapId: string }) {
           <div key={node.id} className="flex-1 overflow-y-auto">
             {activeTab === 'details' ? (
               <DetailsTab node={node} onSave={scheduleFieldSave} />
-            ) : (
+            ) : activeTab === 'connections' ? (
               <ConnectionsTab
                 node={node}
                 parent={parent}
                 children={children}
                 edgesByType={edgesByType}
               />
+            ) : (
+              <HistoryTab nodeId={node.id} mapId={mapId} />
             )}
           </div>
         </motion.aside>
@@ -467,6 +471,139 @@ function ConnectionsTab({ parent, children, edgesByType }: {
         </section>
       ))}
 
+    </div>
+  )
+}
+
+// ─── History tab ──────────────────────────────────────────────────────────────
+
+const FIELD_LABELS: Record<string, string> = {
+  label: 'Label', description: 'Description', category: 'Category',
+  status: 'Status', priority: 'Priority', effort_value: 'Effort value',
+  effort_unit: 'Effort unit', deadline: 'Deadline', color_override: 'Color',
+  parent_id: 'Parent',
+}
+
+const SKIP_FIELDS = new Set([
+  'id', 'map_id', 'user_id', 'created_at', 'updated_at', 'position_x', 'position_y',
+  'ai_category_confidence', 'metadata',
+])
+
+function formatFieldValue(key: string, val: unknown): string {
+  if (val === null || val === undefined) return '—'
+  if (key === 'deadline') return new Date(val as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  if (key === 'effort_unit') return String(val).replace('_', ' ')
+  return String(val)
+}
+
+function timeAgo(dateStr: string): string {
+  const secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+  if (secs < 60) return 'just now'
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  return `${Math.floor(secs / 86400)}d ago`
+}
+
+function HistoryTab({ nodeId, mapId }: { nodeId: string; mapId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['node-history', nodeId],
+    queryFn: () => changeLogsApi.nodeHistory(mapId, nodeId),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+        Loading history…
+      </div>
+    )
+  }
+
+  const history = data?.history ?? []
+
+  if (history.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+        <svg className="w-8 h-8 mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p className="text-sm">No history yet</p>
+        <p className="text-xs mt-1">Changes will appear here</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 space-y-3">
+      {history.map(entry => (
+        <HistoryEntry key={entry.id} entry={entry} />
+      ))}
+    </div>
+  )
+}
+
+function HistoryEntry({ entry }: { entry: ChangeLog }) {
+  const actionColors = {
+    create: 'bg-green-100 text-green-700',
+    update: 'bg-blue-100 text-blue-700',
+    delete: 'bg-red-100 text-red-700',
+  }
+
+  const changedFields = entry.action === 'update' && entry.old_value && entry.new_value
+    ? Object.keys(entry.new_value as Record<string, unknown>).filter(k => {
+        if (SKIP_FIELDS.has(k)) return false
+        const oldVal = (entry.old_value as Record<string, unknown>)[k]
+        const newVal = (entry.new_value as Record<string, unknown>)[k]
+        return oldVal !== newVal
+      })
+    : []
+
+  return (
+    <div className="flex gap-3">
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center shrink-0">
+        <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5" />
+        <div className="w-px flex-1 bg-gray-100 mt-1" />
+      </div>
+
+      <div className="flex-1 pb-3 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${actionColors[entry.action as keyof typeof actionColors]}`}>
+            {entry.action}
+          </span>
+          <span className="text-[11px] text-gray-400 ml-auto shrink-0">{timeAgo(entry.created_at)}</span>
+        </div>
+
+        {entry.action === 'create' && (
+          <p className="text-xs text-gray-500">Node created</p>
+        )}
+
+        {entry.action === 'delete' && (
+          <p className="text-xs text-gray-500">Node deleted</p>
+        )}
+
+        {entry.action === 'update' && changedFields.length > 0 && (
+          <div className="space-y-1">
+            {changedFields.map(field => {
+              const oldVal = (entry.old_value as Record<string, unknown>)[field]
+              const newVal = (entry.new_value as Record<string, unknown>)[field]
+              return (
+                <div key={field} className="text-[11px] text-gray-600">
+                  <span className="font-medium text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
+                  {' '}
+                  <span className="line-through text-gray-400">{formatFieldValue(field, oldVal)}</span>
+                  {' → '}
+                  <span className="text-gray-700">{formatFieldValue(field, newVal)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {entry.action === 'update' && changedFields.length === 0 && (
+          <p className="text-xs text-gray-400">Updated</p>
+        )}
+      </div>
     </div>
   )
 }
