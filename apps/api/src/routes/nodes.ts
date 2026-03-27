@@ -147,9 +147,7 @@ router.delete('/:mapId/nodes/:nodeId', async (req, res, next) => {
   try {
     await assertMapOwnership(req.params.mapId, req.userId)
     const before = await prisma.node.findUnique({ where: { id: req.params.nodeId } })
-    await prisma.node.delete({
-      where: { id: req.params.nodeId, map_id: req.params.mapId },
-    })
+    // Write changelog BEFORE delete — node must exist for the FK constraint
     if (before) {
       await prisma.changeLog.create({
         data: {
@@ -162,6 +160,9 @@ router.delete('/:mapId/nodes/:nodeId', async (req, res, next) => {
         },
       })
     }
+    await prisma.node.delete({
+      where: { id: req.params.nodeId, map_id: req.params.mapId },
+    })
     const [conflicts, critical_path] = await Promise.all([
       detectConflicts(req.params.mapId),
       calculateCriticalPath(req.params.mapId),
