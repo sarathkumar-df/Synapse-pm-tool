@@ -73,6 +73,9 @@ export default function MapEditorPage() {
           <span className="mx-1.5">·</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 font-mono">⌘K</kbd>
           <span>search</span>
+          <span className="mx-1.5">·</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 font-mono">⇧</kbd>
+          <span>multi-select</span>
         </div>
       </div>
 

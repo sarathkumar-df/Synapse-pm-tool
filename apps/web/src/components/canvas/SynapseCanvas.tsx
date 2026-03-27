@@ -13,6 +13,7 @@ import {
   ConnectionMode,
   type Connection,
   type NodeChange,
+  type OnSelectionChangeParams,
   type Node as RFNode,
   type Edge as RFEdge,
 } from '@xyflow/react'
@@ -30,6 +31,7 @@ import NodeToolbarContent from './NodeToolbar'
 import EdgeTypePicker from './EdgeTypePicker'
 import NodeContextMenu from './NodeContextMenu'
 import CommandPalette from './CommandPalette'
+import MultiSelectToolbar from './MultiSelectToolbar'
 import type { SynapseNodeData, SynapseEdgeData } from '../../types/canvas.types'
 import { EDGE_TYPE_STYLES } from '../../constants/node-categories'
 
@@ -54,6 +56,7 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
   const rippleNodeId   = useCanvasStore(s => s.rippleNodeId)
   const selectNode  = useCanvasStore(s => s.selectNode)
   const addNode     = useCanvasStore(s => s.addNode)
+  const deleteNode  = useCanvasStore(s => s.deleteNode)
   const addEdge     = useCanvasStore(s => s.addEdge)
   const updateNode  = useCanvasStore(s => s.updateNode)
   const setConflicts = useCanvasStore(s => s.setConflicts)
@@ -65,6 +68,9 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
   const [rfEdges, setRfEdges, handleEdgesChange] = useEdgesState<RFEdge<SynapseEdgeData>>([])
 
   const hasFitView = useRef(false)
+
+  // Multi-select
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
 
   // Context menu
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
@@ -199,19 +205,46 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     onError: (err: Error) => addToast({ type: 'error', message: err.message }),
   })
 
+  const { mutate: batchDeleteNodes, isPending: isBatchDeleting } = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.all(ids.map(id => nodesApi.delete(mapId, id)))
+      return results[results.length - 1]
+    },
+    onMutate: (ids) => {
+      // Optimistic: remove from Zustand immediately
+      ids.forEach(id => deleteNode(id))
+      setSelectedNodeIds([])
+      selectNode(null)
+      setActivePanel(null)
+    },
+    onSuccess: ({ conflicts, critical_path }) => {
+      setConflicts(conflicts, critical_path)
+    },
+    onError: (err: Error) => addToast({ type: 'error', message: err.message }),
+  })
+
   // ── Canvas event handlers ──────────────────────────────────────────────────
 
   const onNodesChange = useCallback(
     (changes: NodeChange<RFNode<SynapseNodeData>>[]) => {
       handleNodesChange(changes)
-      changes.forEach(c => {
-        if (c.type === 'select') {
-          selectNode(c.selected ? c.id : null)
-          if (c.selected) setActivePanel('node-detail')
-        }
-      })
     },
-    [handleNodesChange, selectNode, setActivePanel]
+    [handleNodesChange]
+  )
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes }: OnSelectionChangeParams) => {
+      const ids = selNodes.map(n => n.id)
+      setSelectedNodeIds(ids)
+      if (ids.length === 1) {
+        selectNode(ids[0])
+        setActivePanel('node-detail')
+      } else {
+        selectNode(null)
+        if (ids.length === 0) setActivePanel(null)
+      }
+    },
+    [selectNode, setActivePanel]
   )
 
   const onNodeDragStop = useCallback(
@@ -245,6 +278,7 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     selectNode(null)
     setActivePanel(null)
     setContextMenu(null)
+    setSelectedNodeIds([])
   }, [selectNode, setActivePanel])
 
   const onContainerDoubleClick = useCallback(
@@ -276,6 +310,19 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     [pendingConnection, createEdgeMutation]
   )
 
+  const handleMultiDelete = useCallback(() => {
+    if (selectedNodeIds.length === 0) return
+    if (!confirm(`Delete ${selectedNodeIds.length} selected nodes? This cannot be undone.`)) return
+    batchDeleteNodes(selectedNodeIds)
+  }, [selectedNodeIds, batchDeleteNodes])
+
+  const handleDeselect = useCallback(() => {
+    setRfNodes(prev => prev.map(n => ({ ...n, selected: false })))
+    setSelectedNodeIds([])
+    selectNode(null)
+    setActivePanel(null)
+  }, [setRfNodes, selectNode, setActivePanel])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   const handlePaletteSelect = useCallback(
@@ -300,6 +347,15 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
         setCommandPaletteOpen(true)
         return
       }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeIds.length > 1) {
+        e.preventDefault()
+        handleMultiDelete()
+        return
+      }
+      if (e.key === 'Escape' && selectedNodeIds.length > 0) {
+        handleDeselect()
+        return
+      }
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         createNode(reactFlow.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }))
@@ -309,7 +365,7 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [reactFlow, createNode, undo, redo, setCommandPaletteOpen])
+  }, [reactFlow, createNode, undo, redo, setCommandPaletteOpen, selectedNodeIds, handleMultiDelete, handleDeselect])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -322,12 +378,14 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
         edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={handleEdgesChange}
+        onSelectionChange={onSelectionChange}
         onConnect={onConnect}
         onConnectEnd={onConnectEnd as any}
         onNodeDragStop={onNodeDragStop as any}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu as any}
         connectionMode={ConnectionMode.Loose}
+        multiSelectionKeyCode="Shift"
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={null}
@@ -346,6 +404,15 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
           </NodeToolbar>
         )}
       </ReactFlow>
+
+      {selectedNodeIds.length > 1 && (
+        <MultiSelectToolbar
+          count={selectedNodeIds.length}
+          onDelete={handleMultiDelete}
+          onDeselect={handleDeselect}
+          isDeleting={isBatchDeleting}
+        />
+      )}
 
       {pendingConnection && (
         <EdgeTypePicker
