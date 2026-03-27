@@ -29,6 +29,7 @@ import SynapseEdgeComponent from './SynapseEdge'
 import NodeToolbarContent from './NodeToolbar'
 import EdgeTypePicker from './EdgeTypePicker'
 import NodeContextMenu from './NodeContextMenu'
+import CommandPalette from './CommandPalette'
 import type { SynapseNodeData, SynapseEdgeData } from '../../types/canvas.types'
 import { EDGE_TYPE_STYLES } from '../../constants/node-categories'
 
@@ -39,8 +40,10 @@ const EDGE_TYPES = { synapse: SynapseEdgeComponent }
 
 function SynapseCanvasInner({ mapId }: { mapId: string }) {
   const reactFlow = useReactFlow()
-  const addToast       = useUIStore(s => s.addToast)
-  const setActivePanel = useUIStore(s => s.setActivePanel)
+  const addToast              = useUIStore(s => s.addToast)
+  const setActivePanel        = useUIStore(s => s.setActivePanel)
+  const commandPaletteOpen    = useUIStore(s => s.commandPaletteOpen)
+  const setCommandPaletteOpen = useUIStore(s => s.setCommandPaletteOpen)
 
   // Zustand subscriptions
   const nodes        = useCanvasStore(s => s.nodes)
@@ -275,9 +278,28 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
+  const handlePaletteSelect = useCallback(
+    (node: { position_x: number; position_y: number; id: string }) => {
+      selectNode(node.id)
+      setActivePanel('node-detail')
+      // Center viewport on the node with a smooth zoom
+      reactFlow.setCenter(
+        node.position_x + 100,
+        node.position_y + 40,
+        { zoom: 1.2, duration: 400 }
+      )
+    },
+    [reactFlow, selectNode, setActivePanel]
+  )
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
+      }
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         createNode(reactFlow.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }))
@@ -287,7 +309,7 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [reactFlow, createNode, undo, redo])
+  }, [reactFlow, createNode, undo, redo, setCommandPaletteOpen])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -342,6 +364,10 @@ function SynapseCanvasInner({ mapId }: { mapId: string }) {
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
         />
+      )}
+
+      {commandPaletteOpen && (
+        <CommandPalette onSelectNode={handlePaletteSelect} />
       )}
     </div>
   )

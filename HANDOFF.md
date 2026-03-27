@@ -3,96 +3,105 @@
 
 ## What Was Completed This Session
 
-### Sprint 2a — Canvas Engine ✅
-All 6 bugs from manual testing were fixed:
-
-1. **Visual updates without refresh** — Root cause: `queryClient.setQueryData(...)` in mutation `onSuccess` handlers was triggering `MapEditorPage`'s `useEffect` to re-run `initCanvas()` with stale server data, overwriting Zustand mutations. Fix: replaced all `setQueryData` calls with direct `setConflicts()` calls on the canvas store.
-
-2. **React Flow ↔ Zustand sync** — Uses `useLayoutEffect` + `useNodesState`/`useEdgesState`. `rfNodesFromStore` (useMemo) feeds into `setRfNodes` via `useLayoutEffect`. Fires synchronously before browser paint → no refresh needed.
-
-3. **Drag position saving** — Fixed Express route ordering: `PATCH /:mapId/nodes/bulk` must be registered BEFORE `PATCH /:mapId/nodes/:nodeId` (Express was matching 'bulk' as a nodeId).
-
-4. **All 4 handles allow connections** — Changed all handles to `type="source"` + added `connectionMode={ConnectionMode.Loose}` to ReactFlow so source→source connections work.
-
-5. **Undo/redo** — Was broken because `initCanvas()` clears both undo/redo stacks. Fixed by the setQueryData → setConflicts change above.
-
-6. **onEdgesChange** — Added `handleEdgesChange` wired to `onEdgesChange` prop on ReactFlow for proper edge state management in controlled mode.
-
-### Sprint 2b — Node Detail Panel ✅ (SYN-212/213/214/215)
+### SYN-218 — Right-click Context Menu ✅
 
 **Files created/modified:**
-- `apps/web/src/components/panels/NodeDetailPanel.tsx` — new, ~480 lines
-- `apps/web/src/pages/MapEditorPage.tsx` — added panel to flex layout
-- `apps/web/src/components/canvas/SynapseCanvas.tsx` — auto-opens panel on node select
+- `apps/web/src/components/canvas/NodeContextMenu.tsx` — new, ~260 lines
+- `apps/web/src/components/canvas/SynapseCanvas.tsx` — added `onNodeContextMenu` handler + context menu state
+
+**Behavior (9 actions):**
+- Right-click any node → menu appears at cursor, auto-clamps to viewport edges
+- **Edit details** — opens NodeDetailPanel
+- **Duplicate** — creates copy offset 220px right, selects it
+- **Change category** — inline sub-panel with 8 category pills (colored, checkmark on active)
+- **Set effort** — inline number input + unit select (hours/days/pts) + Save button; Enter key submits
+- **Set deadline** — inline date picker, saves on change; "Clear deadline" removes it
+- **Add child** — creates node with `parent_id` set, offset 240/120px, auto-opens detail panel
+- **Connect to…** — selects node + shows info toast to drag a handle
+- **Copy link** — copies `{url}#node-{id}` to clipboard
+- **Delete** — confirms if node has children or 3+ edges; removes immediately
+- Escape / click-outside / pane-click all close the menu
+- Browser default context menu suppressed on nodes
+
+### SYN-221 — Cmd+K Command Palette ✅
+
+**Files created/modified:**
+- `apps/web/src/components/canvas/CommandPalette.tsx` — new, ~180 lines
+- `apps/web/src/components/canvas/SynapseCanvas.tsx` — Cmd+K shortcut + `handlePaletteSelect` zoom callback
+- `apps/web/src/pages/MapEditorPage.tsx` — added `⌘K search` hint to top bar
 
 **Behavior:**
-- Clicking a node auto-opens the 400px panel (Framer Motion 200ms slide-in)
-- Clicking empty canvas closes it
-- Two tabs: Details | Connections
-- Details: label (blur-save), description (blur-save), category/status/priority (instant), effort (blur-save), deadline (change-save), color override (instant)
-- 500ms debounced API save with batching of concurrent field changes
-- "Saving…" → "Saved ✓" (2s) indicator
-- Flush-on-switch: pending changes saved immediately when switching nodes
-- Connections tab: parent, children, edges grouped by type with direction arrows (→/←)
+- `Cmd+K` (or `Ctrl+K`) opens palette; input auto-focused; query resets on each open
+- Fuzzy search on node label + description; scoring: exact > starts-with > contains label > contains description
+- Results show category color strip, category pill, status badge
+- `↑` / `↓` navigates; `Enter` or click selects
+- On select: palette closes → canvas smooth-zooms to node (`setCenter`, 400ms) → NodeDetailPanel opens
+- Escape / click backdrop closes
+- Footer shows result count and keyboard hints
+- Rendered inside `SynapseCanvasInner` (needs `useReactFlow()` for `setCenter`)
 
 ---
 
 ## Current State
 
 ### What's working
-- Full canvas CRUD: create (N key / double-click), delete (toolbar), drag (position saved)
+- Full canvas CRUD: create (N key / double-click), delete (toolbar/context menu), drag (position saved)
 - Undo/redo (Cmd+Z / Cmd+Shift+Z, 50 steps)
 - Edge creation (drag handle → pick type from EdgeTypePicker)
-- Node Detail Panel (all fields, auto-save, connections)
+- Node Detail Panel (all fields, auto-save, connections tab)
+- Right-click context menu (9 actions, sub-panels for category/effort/deadline)
+- Cmd+K command palette (fuzzy search, zoom to node)
 - Fit-view on initial load
 
-### Sprint 2b — Remaining (SYN-216 to 222)
+### Sprint 2b — Remaining (SYN-216/217/219/220/222)
 | Ticket | Feature | Notes |
 |--------|---------|-------|
-| SYN-216/217 | Nested nodes — Tab key, drag-onto-node, collapse, 4-level limit | High complexity |
-| SYN-218 | Right-click context menu | 9 actions |
-| SYN-219 | Multi-select polish | Shift+click, bounding box |
-| SYN-220 | Snap-to-grid | Toggle, 20px grid, guides |
-| SYN-221 | Cmd+K command palette | Search nodes, zoom to result |
-| SYN-222 | Change history in panel | ChangeLog entries |
+| SYN-216/217 | Nested nodes — Tab key, drag-onto-node, collapse, 4-level limit | High complexity — tackle next sprint |
+| SYN-219 | Multi-select polish | Shift+click, shared bounding box, drag handles |
+| SYN-220 | Snap-to-grid | Toggle, 20px grid, snap guides |
+| SYN-222 | Change history in panel | ChangeLog entries for selected node |
 
-**Recommended next:** SYN-218 (context menu) and SYN-221 (Cmd+K) — both high-value, low-complexity.
+**Recommended next:** SYN-219 (multi-select polish) — lower complexity, high UX value.
 
 ---
 
-## Key Architecture Decisions (This Session)
+## Key Architecture Decisions
 
-### Zustand ↔ React Flow sync pattern
+### Context menu pattern
+- Component renders at `position: fixed` at cursor coords; clamps to viewport
+- Escape + click-outside handled via `window` listeners in `useEffect`
+- Sub-panels (category/effort/deadline) are local state toggles — no routing
+- All mutations follow the safe pattern: `updateNode()` Zustand + `setConflicts()`, never `setQueryData`
+
+### Command palette zoom pattern
+```tsx
+// Inside SynapseCanvasInner — has access to useReactFlow()
+const handlePaletteSelect = (node) => {
+  selectNode(node.id)
+  setActivePanel('node-detail')
+  reactFlow.setCenter(node.position_x + 100, node.position_y + 40, { zoom: 1.2, duration: 400 })
+}
+```
+Palette must be rendered inside `ReactFlowProvider` (i.e. inside `SynapseCanvasInner`) to use `setCenter`.
+
+### Zustand ↔ React Flow sync pattern (unchanged)
 ```
 Zustand store (nodes/edges)
   → useMemo (rfNodesFromStore / rfEdgesFromStore)
   → useLayoutEffect → setRfNodes / setRfEdges
   → ReactFlow (controlled mode: nodes={rfNodes} edges={rfEdges})
 ```
-- `useLayoutEffect` fires synchronously before browser paint — changes appear immediately
-- During drag: `rfNodesFromStore` doesn't change (Zustand only written on dragStop) → no position snap
-- `handleNodesChange` applied for ALL change types so drag stays smooth in controlled mode
-- Selection changes additionally sync to Zustand via `selectNode`
 
-### Mutation pattern (no setQueryData)
-All canvas mutations follow this pattern:
+### Mutation pattern (no setQueryData — unchanged)
 ```tsx
-onSuccess: ({ node/edge, conflicts, critical_path }) => {
-  addNode/addEdge/updateNode(...)  // Zustand update → triggers RF sync
-  setConflicts(conflicts, critical_path)  // NOT setQueryData — avoids initCanvas reset
+onSuccess: ({ node, conflicts, critical_path }) => {
+  updateNode(node.id, node)       // Zustand → triggers RF sync
+  setConflicts(conflicts, critical_path)  // NOT setQueryData
 }
-```
-`initCanvas()` must ONLY be called once on initial map load. It clears undo/redo stacks.
-
-### Panel auto-save pattern
-```
-Field change → updateNode() [optimistic] → accumulate pendingUpdates ref
-             → 500ms debounce → nodesApi.update() [API]
-             → flush immediately on node switch / panel close
 ```
 
 ---
 
 ## Known Issues / Deferred
-- Edge rendering aesthetics need polish (mentioned by user, deferred)
-- No `onEdgesChange` equivalent for edge deletion from canvas — edges can only be deleted via API (context menu will fix this in SYN-218)
+- Edge rendering aesthetics need polish (deferred)
+- Edge deletion from canvas not yet wired to `onEdgesChange` — delete via context menu (future: SYN-219 multi-select will add batch delete)

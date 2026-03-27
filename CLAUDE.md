@@ -97,7 +97,7 @@ docs/adr/        → Architecture Decision Records
 |--------|-------|--------|
 | Sprint 1 | Auth, projects, maps CRUD, workspace | ✅ Done — 146 tests passing |
 | Sprint 2a | Canvas engine, nodes, edges, undo/redo, auto-save | ✅ Done |
-| Sprint 2b | Node Detail Panel, nesting, context menu, Cmd+K | 🔨 In progress — SYN-212/213/214/215 done |
+| Sprint 2b | Node Detail Panel, nesting, context menu, Cmd+K | 🔨 In progress — SYN-212–215/218/221 done |
 | Sprint 3 | Search, filter bar, workspace polish | ⏳ Pending |
 
 Full sprint specs: `docs/sprints/`
