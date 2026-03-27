@@ -3,105 +3,174 @@
 
 ## What Was Completed This Session
 
-### SYN-218 — Right-click Context Menu ✅
+### SYN-219 — Multi-select Polish ✅
 
 **Files created/modified:**
-- `apps/web/src/components/canvas/NodeContextMenu.tsx` — new, ~260 lines
-- `apps/web/src/components/canvas/SynapseCanvas.tsx` — added `onNodeContextMenu` handler + context menu state
-
-**Behavior (9 actions):**
-- Right-click any node → menu appears at cursor, auto-clamps to viewport edges
-- **Edit details** — opens NodeDetailPanel
-- **Duplicate** — creates copy offset 220px right, selects it
-- **Change category** — inline sub-panel with 8 category pills (colored, checkmark on active)
-- **Set effort** — inline number input + unit select (hours/days/pts) + Save button; Enter key submits
-- **Set deadline** — inline date picker, saves on change; "Clear deadline" removes it
-- **Add child** — creates node with `parent_id` set, offset 240/120px, auto-opens detail panel
-- **Connect to…** — selects node + shows info toast to drag a handle
-- **Copy link** — copies `{url}#node-{id}` to clipboard
-- **Delete** — confirms if node has children or 3+ edges; removes immediately
-- Escape / click-outside / pane-click all close the menu
-- Browser default context menu suppressed on nodes
-
-### SYN-221 — Cmd+K Command Palette ✅
-
-**Files created/modified:**
-- `apps/web/src/components/canvas/CommandPalette.tsx` — new, ~180 lines
-- `apps/web/src/components/canvas/SynapseCanvas.tsx` — Cmd+K shortcut + `handlePaletteSelect` zoom callback
-- `apps/web/src/pages/MapEditorPage.tsx` — added `⌘K search` hint to top bar
+- `apps/web/src/components/canvas/MultiSelectToolbar.tsx` — new
+- `apps/web/src/components/canvas/SynapseCanvas.tsx` — wired multi-select logic
 
 **Behavior:**
-- `Cmd+K` (or `Ctrl+K`) opens palette; input auto-focused; query resets on each open
-- Fuzzy search on node label + description; scoring: exact > starts-with > contains label > contains description
-- Results show category color strip, category pill, status badge
-- `↑` / `↓` navigates; `Enter` or click selects
-- On select: palette closes → canvas smooth-zooms to node (`setCenter`, 400ms) → NodeDetailPanel opens
-- Escape / click backdrop closes
-- Footer shows result count and keyboard hints
-- Rendered inside `SynapseCanvasInner` (needs `useReactFlow()` for `setCenter`)
+- `Shift+click` adds/removes nodes from selection (`multiSelectionKeyCode="Shift"`)
+- `Shift+drag` on empty canvas = box selection (React Flow default)
+- When 2+ nodes selected: floating `MultiSelectToolbar` at top-center shows count, Delete all, Deselect (×)
+- `Delete`/`Backspace` key triggers batch delete in multi-select mode
+- `Escape` deselects all
+- Batch delete: optimistic Zustand removal → parallel API calls → conflict sync
+- Single-node selection still works (detail panel opens, NodeToolbar shows)
+
+**Architecture note:**
+- `onSelectionChange` replaces per-change select handling in `onNodesChange`
+- `onSelectionChange` does NOT call `setActivePanel(null)` for empty selection — only `onPaneClick` and `handleDeselect` do this explicitly (prevents panel closing on node data updates)
+
+---
+
+### SYN-220 — Snap-to-Grid ✅
+
+**Files created/modified:**
+- `apps/web/src/components/canvas/SnapGridToggle.tsx` — new
+- `apps/web/src/components/canvas/SynapseCanvas.tsx` — snapToGrid props + background
+- `apps/web/src/store/ui.store.ts` — `snapToGrid: boolean` + `setSnapToGrid`
+
+**Behavior:**
+- "Snap" button at bottom-left of canvas; press `G` to toggle
+- Button turns blue when active
+- `snapToGrid + snapGrid=[20,20]` passed to ReactFlow
+- Background switches from dot pattern → 20px line grid when snap is on (visual guides)
+
+---
+
+### SYN-222 — Change History in Panel ✅
+
+**Files created/modified:**
+- `apps/api/src/routes/nodes.ts` — changelog writes + GET history endpoint
+- `apps/web/src/services/api.client.ts` — `changeLogsApi.nodeHistory`
+- `apps/web/src/components/panels/NodeDetailPanel.tsx` — History tab + HistoryTab component
+
+**Behavior:**
+- History tab added alongside Details and Connections in NodeDetailPanel
+- Timeline shows CREATE / UPDATE / DELETE entries per node
+- UPDATE shows per-field diff: `Status: todo → in_progress`
+- Position-only saves (drag auto-save) are intentionally NOT logged
+- History auto-refreshes after each save (`queryClient.invalidateQueries`)
+- `GET /api/maps/:mapId/nodes/:nodeId/history` returns last 50 entries
+
+**Critical fix — delete changelog ordering:**
+- Changelog must be written BEFORE `prisma.node.delete()` — the `change_logs.node_id` FK references `nodes.id`; writing after delete causes P2003 FK violation
+
+---
+
+### Build fix ✅
+
+Pre-existing TypeScript import path errors that broke `pnpm build` (dev server never type-checks):
+- `packages/shared/src/types/index.ts` — fixed `../../../` → `../../../../` for both contract files
+- `apps/web/src/store/canvas.store.ts` — switched from `docs/contracts` relative import to `@synapse/shared`
+- `apps/web/src/store/ui.store.ts` — same
+- `apps/web/src/components/panels/NodeDetailPanel.tsx` — same
+- `docs/contracts/api.ts` — removed `map_id` from `CreateNodeRequest` (it's a URL param, not body); removed unused imports
 
 ---
 
 ## Current State
 
 ### What's working
-- Full canvas CRUD: create (N key / double-click), delete (toolbar/context menu), drag (position saved)
+- Full canvas CRUD: create (N key / double-click), delete (toolbar/context menu/keyboard), drag (position saved)
 - Undo/redo (Cmd+Z / Cmd+Shift+Z, 50 steps)
 - Edge creation (drag handle → pick type from EdgeTypePicker)
-- Node Detail Panel (all fields, auto-save, connections tab)
+- Node Detail Panel (all fields, auto-save, connections tab, history tab)
 - Right-click context menu (9 actions, sub-panels for category/effort/deadline)
 - Cmd+K command palette (fuzzy search, zoom to node)
-- Fit-view on initial load
+- Multi-select (Shift+click/drag, batch delete, toolbar)
+- Snap-to-grid (toggle button + G key, 20px grid, visual guides)
+- Change history per node (create/update/delete audit trail)
+- Production build passing (`pnpm --filter web build`)
 
-### Sprint 2b — Remaining (SYN-216/217/219/220/222)
-| Ticket | Feature | Notes |
-|--------|---------|-------|
-| SYN-216/217 | Nested nodes — Tab key, drag-onto-node, collapse, 4-level limit | High complexity — tackle next sprint |
-| SYN-219 | Multi-select polish | Shift+click, shared bounding box, drag handles |
-| SYN-220 | Snap-to-grid | Toggle, 20px grid, snap guides |
-| SYN-222 | Change history in panel | ChangeLog entries for selected node |
+### Sprint 2b — Status
+| Ticket | Feature | Status |
+|--------|---------|--------|
+| SYN-212–215 | Node Detail Panel + auto-save | ✅ Done |
+| SYN-218 | Right-click context menu | ✅ Done |
+| SYN-219 | Multi-select polish | ✅ Done |
+| SYN-220 | Snap-to-grid | ✅ Done |
+| SYN-221 | Cmd+K command palette | ✅ Done |
+| SYN-222 | Change history in panel | ✅ Done |
+| SYN-216/217 | Nested nodes | ⏳ Deferred — highest complexity |
 
-**Recommended next:** SYN-219 (multi-select polish) — lower complexity, high UX value.
+**Recommended next session:** Start Sprint 3 (search, filter bar, workspace polish) OR tackle SYN-216/217 (nested nodes). Read this file first.
 
 ---
 
 ## Key Architecture Decisions
 
-### Context menu pattern
-- Component renders at `position: fixed` at cursor coords; clamps to viewport
-- Escape + click-outside handled via `window` listeners in `useEffect`
-- Sub-panels (category/effort/deadline) are local state toggles — no routing
-- All mutations follow the safe pattern: `updateNode()` Zustand + `setConflicts()`, never `setQueryData`
-
-### Command palette zoom pattern
+### onSelectionChange — do NOT close panel on empty selection
 ```tsx
-// Inside SynapseCanvasInner — has access to useReactFlow()
-const handlePaletteSelect = (node) => {
-  selectNode(node.id)
-  setActivePanel('node-detail')
-  reactFlow.setCenter(node.position_x + 100, node.position_y + 40, { zoom: 1.2, duration: 400 })
-}
+const onSelectionChange = useCallback(({ nodes: selNodes }) => {
+  const ids = selNodes.map(n => n.id)
+  setSelectedNodeIds(ids)
+  if (ids.length === 1) {
+    selectNode(ids[0])
+    setActivePanel('node-detail')
+  } else if (ids.length > 1) {
+    selectNode(null)
+  }
+  // ids.length === 0: do nothing here — RF fires spurious empty-selection
+  // events when setConflicts causes setRfNodes to be called.
+  // Panel close handled only by onPaneClick and handleDeselect.
+}, [selectNode, setActivePanel])
 ```
-Palette must be rendered inside `ReactFlowProvider` (i.e. inside `SynapseCanvasInner`) to use `setCenter`.
+
+### Changelog write order for DELETE
+```ts
+// CORRECT — write changelog while node still exists
+const before = await prisma.node.findUnique(...)
+await prisma.changeLog.create({ data: { node_id: nodeId, ... } })  // FK valid
+await prisma.node.delete(...)
+
+// WRONG — FK violation (node already gone)
+await prisma.node.delete(...)
+await prisma.changeLog.create({ data: { node_id: nodeId, ... } })  // P2003 error
+```
+
+### Batch delete pattern (multi-select)
+```tsx
+const { mutate: batchDeleteNodes } = useMutation({
+  mutationFn: async (ids) => {
+    const results = await Promise.all(ids.map(id => nodesApi.delete(mapId, id)))
+    return results[results.length - 1]  // last result has final conflict state
+  },
+  onMutate: (ids) => {
+    ids.forEach(id => deleteNode(id))   // optimistic — instant UI
+    setSelectedNodeIds([])
+    selectNode(null)
+  },
+  onSuccess: ({ conflicts, critical_path }) => setConflicts(conflicts, critical_path),
+})
+```
+
+### Snap-to-grid state location
+`snapToGrid` lives in `useUIStore` (not `useCanvasStore`) — it's a UI preference, not canvas data.
+
+### Context menu pattern (unchanged)
+- `position: fixed` at cursor coords, clamped to viewport
+- Escape + mousedown-outside via `window` listeners in `useEffect`
+- All mutations follow safe pattern: Zustand first, never `setQueryData`
+
+### Command palette zoom pattern (unchanged)
+```tsx
+reactFlow.setCenter(node.position_x + 100, node.position_y + 40, { zoom: 1.2, duration: 400 })
+```
+Must be inside `SynapseCanvasInner` (needs `useReactFlow()`).
 
 ### Zustand ↔ React Flow sync pattern (unchanged)
 ```
 Zustand store (nodes/edges)
-  → useMemo (rfNodesFromStore / rfEdgesFromStore)
-  → useLayoutEffect → setRfNodes / setRfEdges
-  → ReactFlow (controlled mode: nodes={rfNodes} edges={rfEdges})
-```
-
-### Mutation pattern (no setQueryData — unchanged)
-```tsx
-onSuccess: ({ node, conflicts, critical_path }) => {
-  updateNode(node.id, node)       // Zustand → triggers RF sync
-  setConflicts(conflicts, critical_path)  // NOT setQueryData
-}
+  → useMemo (rfNodesFromStore / rfEdgesFromStore)  — excludes selectedNodeId
+  → useLayoutEffect → setRfNodes / setRfEdges       — fires before paint
+  → ReactFlow (controlled mode)
 ```
 
 ---
 
 ## Known Issues / Deferred
-- Edge rendering aesthetics need polish (deferred)
-- Edge deletion from canvas not yet wired to `onEdgesChange` — delete via context menu (future: SYN-219 multi-select will add batch delete)
+- Edge deletion from canvas keyboard shortcut not wired (delete via context menu or NodeToolbar)
+- Edge rendering aesthetics need polish (deferred to Sprint 3)
+- SYN-216/217 nested nodes deferred (highest complexity, tackle last or next sprint)
